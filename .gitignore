@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+ENV/
+env/
+
+# App specific
+.env
+cache/
+downloads/
+output/
+shortlisted/
+.streamlit/

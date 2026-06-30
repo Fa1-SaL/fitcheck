@@ -1,0 +1,20 @@
+{
+  "openai_model": "gpt-4o-mini",
+  "embedding_model": "text-embedding-3-small",
+  "default_shortlist_threshold": 75,
+  "scoring_weights": {
+    "required_skills": 50.0,
+    "preferred_skills": 10.0,
+    "semantic_similarity": 20.0,
+    "experience": 10.0,
+    "title": 5.0,
+    "education_certification": 5.0
+  },
+  "cache_location": "cache",
+  "downloads_folder": "downloads",
+  "output_folder": "output",
+  "shortlisted_folder": "shortlisted",
+  "max_concurrency": 4,
+  "max_retries": 3,
+  "retry_backoff_factor": 2.0
+}

@@ -1,0 +1,148 @@
+/* Google Fonts Import */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap');
+
+/* Main Streamlit App styling override */
+html, body, [class*="css"] {
+    font-family: 'Outfit', sans-serif !important;
+}
+
+/* Title Styling */
+.main-title {
+    font-family: 'Space Grotesk', sans-serif;
+    background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 700;
+    font-size: 3rem !important;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.05em;
+}
+
+.subtitle {
+    font-size: 1.1rem;
+    color: #94a3b8;
+    margin-bottom: 2rem;
+}
+
+/* Premium Card Panels */
+.recruiter-card {
+    background: rgba(30, 41, 59, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(8px);
+    transition: all 0.3s ease;
+}
+
+.recruiter-card:hover {
+    border-color: rgba(99, 102, 241, 0.4);
+    box-shadow: 0 8px 30px rgba(99, 102, 241, 0.1);
+    transform: translateY(-2px);
+}
+
+/* Metric / Summary Cards styling */
+.metric-container {
+    display: flex;
+    justify-content: space-between;
+    gap: 15px;
+    margin-bottom: 25px;
+}
+
+.metric-card {
+    flex: 1;
+    background: rgba(30, 41, 59, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    transition: all 0.25s ease;
+}
+
+.metric-card:hover {
+    border-color: rgba(168, 85, 247, 0.3);
+    background: rgba(30, 41, 59, 0.85);
+}
+
+.metric-val {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: #f8fafc;
+    line-height: 1.2;
+}
+
+.metric-label {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+    margin-top: 4px;
+}
+
+/* Terminal Log Panel */
+.terminal-log {
+    background-color: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    padding: 15px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 0.85rem;
+    color: #38bdf8;
+    height: 250px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.5;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+
+.terminal-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.terminal-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.dot-red { background-color: #ef4444; }
+.dot-yellow { background-color: #eab308; }
+.dot-green { background-color: #22c55e; }
+
+/* Customizing Streamlit widgets dynamically */
+div[data-testid="stForm"] {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+}
+
+/* Start Button custom hover */
+div.stButton > button {
+    background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%) !important;
+    color: white !important;
+    border: none !important;
+    font-weight: 600 !important;
+    font-size: 1rem !important;
+    padding: 10px 24px !important;
+    border-radius: 10px !important;
+    transition: all 0.3s ease !important;
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4) !important;
+}
+
+div.stButton > button:hover {
+    transform: scale(1.02) !important;
+    box-shadow: 0 6px 20px rgba(168, 85, 247, 0.6) !important;
+}
+
+div.stButton > button:active {
+    transform: scale(0.98) !important;
+}

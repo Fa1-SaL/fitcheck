@@ -1,0 +1,1 @@
+# recruiter config package
