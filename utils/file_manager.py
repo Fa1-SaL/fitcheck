@@ -109,6 +109,39 @@ def download_and_copy_shortlisted(candidates: List[Candidate], dest_dir: Path) -
         "time_taken": round(elapsed, 2)
     }
 
+def generate_resumes_zip(candidates: List[Candidate]) -> bytes:
+    """Generates an in-memory ZIP archive of all successfully parsed/downloaded resumes."""
+    import zipfile
+    import io
+    import re
+    
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for cand in candidates:
+            src_path = None
+            if cand.local_path and Path(cand.local_path).exists():
+                src_path = Path(cand.local_path)
+                
+            if src_path:
+                orig_filename = src_path.name
+                clean_name = orig_filename
+                if "_" in orig_filename:
+                    parts = orig_filename.split("_", 1)
+                    if len(parts) == 2:
+                        prefix = parts[0]
+                        if all(c in "0123456789abcdefABCDEF" for c in prefix) and len(prefix) >= 8:
+                            clean_name = parts[1]
+                            
+                safe_cand_name = re.sub(r'[\\/*?:"<>|]', "", cand.name).strip()
+                if safe_cand_name:
+                    target_name = f"{safe_cand_name} - {clean_name}"
+                else:
+                    target_name = clean_name
+                    
+                zip_file.write(src_path, arcname=target_name)
+                
+    return zip_buffer.getvalue()
+
 def export_csv_results(candidates: List[Candidate]) -> Path:
     """
     Generate and save results.csv containing Candidate Name, Match Score, Status, Resume URL,

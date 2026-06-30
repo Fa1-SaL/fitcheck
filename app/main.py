@@ -66,7 +66,7 @@ from services.google_drive import download_resume
 from services.parser import extract_text_from_file
 from services.ai_extractor import extract_job_description, extract_resume_info
 from services.matching import calculate_match_score, get_embedding, get_embeddings_batch, evaluate_candidate_recruiter
-from utils.file_manager import clear_shortlisted_folder, download_and_copy_shortlisted, export_csv_results, archive_processing_logs
+from utils.file_manager import clear_shortlisted_folder, download_and_copy_shortlisted, export_csv_results, archive_processing_logs, generate_resumes_zip
 from models.candidate import Candidate
 import streamlit.components.v1 as components
 
@@ -277,55 +277,6 @@ table_placeholder = st.empty()
 def update_table_display():
     pass
 
-def pick_folder_subprocess() -> str:
-    """Spawns a PowerShell COM folder picker to open a native Windows folder selection dialog."""
-    import subprocess
-    import sys
-    
-    cmd = [
-        "powershell",
-        "-NoProfile",
-        "-Command",
-        "$app = New-Object -ComObject Shell.Application; $folder = $app.BrowseForFolder(0, 'Select Folder to Download Resumes', 0); if ($folder) { Write-Output $folder.Self.Path }"
-    ]
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=120
-        )
-        path = result.stdout.strip()
-        if path:
-            return path
-    except Exception as e:
-        logger.warning(f"PowerShell COM folder picker failed: {str(e)}")
-        
-    # Fallback to Tkinter subprocess if PowerShell fails
-    code = """
-import tkinter as tk
-from tkinter import filedialog
-try:
-    root = tk.Tk()
-    root.withdraw()
-    selected_dir = filedialog.askdirectory(title="Select Folder to Download Resumes")
-    root.destroy()
-    if selected_dir:
-        print(selected_dir)
-except Exception:
-    pass
-"""
-    try:
-        result = subprocess.run(
-            [sys.executable, "-c", code],
-            capture_output=True,
-            text=True,
-            timeout=120
-        )
-        return result.stdout.strip()
-    except Exception as e:
-        logger.warning(f"Fallback Tkinter subprocess folder picker failed: {str(e)}")
-        return ""
 
 # 5. Recruiter Export Panel & Output TSV Clipboard Section
 # 5. Recruiter Export Panel
@@ -399,55 +350,22 @@ if st.session_state.candidates:
             use_container_width=True
         )
         
-    # Column 3: Download All Resumes
+    # Column 3: Download All Resumes (ZIP)
     with col_dl:
-        if st.button("Download All Resumes", disabled=not st.session_state.candidates, use_container_width=True):
-            selected_dir = pick_folder_subprocess()
-            if selected_dir:
-                st.session_state.download_target_dir = selected_dir
-                st.session_state.trigger_download = True
-                st.session_state.show_manual_path = False
-                st.rerun()
-            else:
-                st.session_state.show_manual_path = True
-                
-    # Fallback path manual input field
-    if st.session_state.get("show_manual_path", False):
-        st.info("Please enter the destination path manually below.")
-        fallback_path = st.text_input(
-            "Destination Folder Path",
-            value=st.session_state.get("download_target_dir", ""),
-            placeholder="C:\\path\\to\\destination\\folder",
-            key="fallback_path_input"
+        zip_data = b""
+        if st.session_state.candidates:
+            try:
+                zip_data = generate_resumes_zip(st.session_state.candidates)
+            except Exception as e:
+                logger.error(f"Failed to generate resumes ZIP: {str(e)}")
+        st.download_button(
+            label="Download All Resumes (ZIP)",
+            data=zip_data,
+            file_name="all_resumes.zip",
+            mime="application/zip",
+            disabled=not st.session_state.candidates or not zip_data,
+            use_container_width=True
         )
-        if st.button("Confirm and Download Resumes", use_container_width=True):
-            if fallback_path and fallback_path.strip():
-                st.session_state.download_target_dir = fallback_path.strip()
-                st.session_state.trigger_download = True
-                st.session_state.show_manual_path = False
-                st.rerun()
-            else:
-                st.error("Please enter a valid path.")
-                
-    # Run manual download trigger
-    if st.session_state.get("trigger_download", False) and st.session_state.get("download_target_dir"):
-        target_path = Path(st.session_state.download_target_dir)
-        with st.spinner("Downloading and copying resumes..."):
-            summary = download_and_copy_shortlisted(st.session_state.candidates, target_path)
-            st.session_state.download_summary = summary
-            st.session_state.trigger_download = False
-            st.rerun()
-            
-    # Download summary display
-    if st.session_state.get("download_summary"):
-        s = st.session_state.download_summary
-        st.markdown("#### Resume Download Summary")
-        st.success(f"Resumes successfully saved to: {s['destination']}")
-        
-        scol1, scol2, scol3 = st.columns(3)
-        scol1.metric("Successfully Saved", s["downloaded"])
-        scol2.metric("Failed to Save", s["failed"])
-        scol3.metric("Time Taken", f"{s['time_taken']}s")
         
     # 5.1 Shortlisted Candidates Contact Details Grid
     if has_shortlisted and tsv_input:
