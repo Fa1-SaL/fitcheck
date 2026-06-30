@@ -278,17 +278,36 @@ def update_table_display():
     pass
 
 def pick_folder_subprocess() -> str:
-    """Spawns a subprocess to run tkinter folder picker, preventing thread safety crashes."""
+    """Spawns a PowerShell COM folder picker to open a native Windows folder selection dialog."""
     import subprocess
     import sys
     
+    cmd = [
+        "powershell",
+        "-NoProfile",
+        "-Command",
+        "$app = New-Object -ComObject Shell.Application; $folder = $app.BrowseForFolder(0, 'Select Folder to Download Resumes', 0); if ($folder) { Write-Output $folder.Self.Path }"
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        path = result.stdout.strip()
+        if path:
+            return path
+    except Exception as e:
+        logger.warning(f"PowerShell COM folder picker failed: {str(e)}")
+        
+    # Fallback to Tkinter subprocess if PowerShell fails
     code = """
 import tkinter as tk
 from tkinter import filedialog
 try:
     root = tk.Tk()
     root.withdraw()
-    root.attributes('-topmost', True)
     selected_dir = filedialog.askdirectory(title="Select Folder to Download Resumes")
     root.destroy()
     if selected_dir:
@@ -297,20 +316,15 @@ except Exception:
     pass
 """
     try:
-        creationflags = 0
-        if sys.platform == "win32":
-            creationflags = subprocess.CREATE_NO_WINDOW
-            
         result = subprocess.run(
             [sys.executable, "-c", code],
             capture_output=True,
             text=True,
-            creationflags=creationflags,
             timeout=120
         )
         return result.stdout.strip()
     except Exception as e:
-        logger.warning(f"Subprocess folder picker failed: {str(e)}")
+        logger.warning(f"Fallback Tkinter subprocess folder picker failed: {str(e)}")
         return ""
 
 # 5. Recruiter Export Panel & Output TSV Clipboard Section

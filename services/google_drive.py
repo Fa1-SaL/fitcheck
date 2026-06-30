@@ -126,6 +126,46 @@ def download_via_public_url(file_id: str, link_type: str, candidate_name: str, u
     logger.info(f"Saved download to: {dest_path.name}")
     return dest_path, filename
 
+@retry(exceptions=(requests.RequestException, RuntimeError))
+def download_direct_link(url: str, candidate_name: str, url_hash: str) -> Tuple[Path, str]:
+    """Download a direct URL (non-Google Drive) using standard HTTP requests with retries."""
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "*/*"
+    })
+    safe_name = re.sub(r"[^\w\-_.]", "_", candidate_name)
+    logger.info(f"Downloading direct link URL for candidate {candidate_name}...")
+    
+    response = session.get(url, stream=True, timeout=20)
+    if response.status_code != 200:
+        raise RuntimeError(f"Direct download failed. Status code: {response.status_code}")
+        
+    original_filename = parse_filename_from_headers(response, "resume")
+    ext = Path(original_filename).suffix.lower()
+    
+    if ext not in [".pdf", ".docx", ".doc"]:
+        content_type = response.headers.get("Content-Type", "")
+        if "pdf" in content_type:
+            ext = ".pdf"
+        elif "officedocument" in content_type:
+            ext = ".docx"
+        elif "msword" in content_type:
+            ext = ".doc"
+        else:
+            ext = ".pdf"
+            
+    filename = f"{url_hash}_{safe_name}_resume{ext}"
+    dest_path = DOWNLOADS_DIR / filename
+    
+    with open(dest_path, "wb") as f:
+        for chunk in response.iter_content(chunk_size=131072):
+            if chunk:
+                f.write(chunk)
+                
+    logger.info(f"Saved download to: {dest_path.name}")
+    return dest_path, filename
+
 def download_resume(url: str, candidate_name: str) -> Tuple[Path, str]:
     """
     Orchestrate resume download. Checks local folder cache first.
@@ -134,12 +174,9 @@ def download_resume(url: str, candidate_name: str) -> Tuple[Path, str]:
     Returns:
         Tuple[Path, str]: (absolute_file_path, filename)
     """
-    file_id, link_type = parse_google_drive_link(url)
-    if not file_id:
-        raise ValueError(f"Invalid Google Drive URL: '{url}'. Please provide a valid drive share link.")
-        
+    url = url.strip()
     # Calculate unique hash from the URL
-    url_hash = hashlib.sha256(url.strip().encode("utf-8")).hexdigest()[:12]
+    url_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()[:12]
     
     # Check if a file matching this url_hash already exists in the downloads directory
     DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -148,5 +185,11 @@ def download_resume(url: str, candidate_name: str) -> Tuple[Path, str]:
             logger.info(f"Reused downloaded resume for {candidate_name} (found cached: {item.name})")
             return item, item.name
             
+    # Check link type
+    file_id, link_type = parse_google_drive_link(url)
+    if not file_id:
+        # Fallback to direct URL download
+        return download_direct_link(url, candidate_name, url_hash)
+        
     # Cache miss - download it with retry support
     return download_via_public_url(file_id, link_type, candidate_name, url_hash)
