@@ -127,6 +127,37 @@ def download_via_public_url(file_id: str, link_type: str, candidate_name: str, u
     safe_name = re.sub(r"[^\w\-_.]", "_", candidate_name)
     DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
     
+def write_response_to_file(response: requests.Response, dest_path: Path, pre_read_content: Optional[bytes] = None) -> None:
+    """Helper to write stream or pre-read bytes to disk safely."""
+    with open(dest_path, "wb") as f:
+        if pre_read_content is not None:
+            f.write(pre_read_content)
+        else:
+            for chunk in response.iter_content(chunk_size=131072):
+                if chunk:
+                    f.write(chunk)
+    if not dest_path.exists() or dest_path.stat().st_size < 10:
+        if dest_path.exists():
+            try:
+                dest_path.unlink()
+            except Exception:
+                pass
+        raise RuntimeError(f"Downloaded file {dest_path.name} is empty or corrupted (<10 bytes).")
+
+@retry(exceptions=(requests.RequestException, RuntimeError))
+def download_via_public_url(file_id: str, link_type: str, candidate_name: str, url_hash: str) -> Tuple[Path, str]:
+    """
+    Download a public Google Drive file using standard HTTP requests with retries.
+    Handles virus confirmation HTML pages and Google Doc exports safely without stream loss.
+    """
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "*/*"
+    })
+    safe_name = re.sub(r"[^\w\-_.]", "_", candidate_name)
+    DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    
     if link_type == "document":
         logger.info(f"Downloading Google Doc ID {file_id} via DOCX export link...")
         url = f"https://docs.google.com/document/d/{file_id}/export"
@@ -135,10 +166,7 @@ def download_via_public_url(file_id: str, link_type: str, candidate_name: str, u
             if response.status_code == 200 and not response.headers.get("Content-Type", "").startswith("text/html"):
                 filename = f"{url_hash}_{safe_name}_resume{ext}"
                 dest_path = DOWNLOADS_DIR / filename
-                with open(dest_path, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=131072):
-                        if chunk:
-                            f.write(chunk)
+                write_response_to_file(response, dest_path)
                 dest_path = detect_extension_and_rename(dest_path, ext, response.headers.get("Content-Type", ""))
                 logger.info(f"Saved Google Doc download to: {dest_path.name}")
                 return dest_path, dest_path.name
@@ -158,12 +186,12 @@ def download_via_public_url(file_id: str, link_type: str, candidate_name: str, u
             
         # 2. Check if response is HTML (virus scan confirmation form or export warning)
         content_type = response.headers.get("Content-Type", "")
+        pre_read_bytes = None
+        
         if response.status_code == 200 and "text/html" in content_type:
-            # Read response content to check for form or virus warning
-            content_bytes = response.content
-            html_text = content_bytes.decode("utf-8", errors="ignore")
+            pre_read_bytes = response.content
+            html_text = pre_read_bytes.decode("utf-8", errors="ignore")
             
-            # Check for form submission action (modern Drive virus warning)
             action_match = re.search(r'action="([^"]+)"', html_text)
             inputs = re.findall(r'<input[^>]*name="([^"]+)"[^>]*value="([^"]*)"', html_text)
             if action_match and inputs:
@@ -171,14 +199,14 @@ def download_via_public_url(file_id: str, link_type: str, candidate_name: str, u
                 form_params = dict(inputs)
                 logger.info("Submitting Google Drive virus scan confirmation form...")
                 response = session.get(action_url, params=form_params, stream=True, timeout=20)
+                pre_read_bytes = None
                 content_type = response.headers.get("Content-Type", "")
             elif "can't scan this file for viruses" in html_text or "confirm=" in html_text:
-                # Fallback form submission url
                 form_params = {"id": file_id, "export": "download", "confirm": "t"}
                 response = session.get("https://drive.usercontent.google.com/download", params=form_params, stream=True, timeout=20)
+                pre_read_bytes = None
                 content_type = response.headers.get("Content-Type", "")
             elif "Google Docs" in html_text or "export" in html_text:
-                # It's actually a Google Doc that was linked as binary ID
                 return download_via_public_url(file_id, "document", candidate_name, url_hash)
                 
         if response.status_code != 200:
@@ -187,7 +215,7 @@ def download_via_public_url(file_id: str, link_type: str, candidate_name: str, u
         original_filename = parse_filename_from_headers(response, "resume")
         ext = Path(original_filename).suffix.lower()
         
-        # If downloaded content is still HTML, try exporting as Google Doc
+        # If downloaded content is still HTML after attempts, try exporting as Google Doc
         if "text/html" in response.headers.get("Content-Type", ""):
             try:
                 return download_via_public_url(file_id, "document", candidate_name, url_hash)
@@ -197,11 +225,7 @@ def download_via_public_url(file_id: str, link_type: str, candidate_name: str, u
         filename = f"{url_hash}_{safe_name}_resume{ext if ext else '.docx'}"
         dest_path = DOWNLOADS_DIR / filename
         
-        with open(dest_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=131072):
-                if chunk:
-                    f.write(chunk)
-                    
+        write_response_to_file(response, dest_path, pre_read_content=pre_read_bytes)
         dest_path = detect_extension_and_rename(dest_path, ext, response.headers.get("Content-Type", ""))
         logger.info(f"Saved download to: {dest_path.name}")
         return dest_path, dest_path.name
@@ -229,11 +253,7 @@ def download_direct_link(url: str, candidate_name: str, url_hash: str) -> Tuple[
     filename = f"{url_hash}_{safe_name}_resume{ext if ext else '.docx'}"
     dest_path = DOWNLOADS_DIR / filename
     
-    with open(dest_path, "wb") as f:
-        for chunk in response.iter_content(chunk_size=131072):
-            if chunk:
-                f.write(chunk)
-                
+    write_response_to_file(response, dest_path)
     dest_path = detect_extension_and_rename(dest_path, ext, content_type)
     logger.info(f"Saved download to: {dest_path.name}")
     return dest_path, dest_path.name
@@ -241,27 +261,28 @@ def download_direct_link(url: str, candidate_name: str, url_hash: str) -> Tuple[
 def download_resume(url: str, candidate_name: str) -> Tuple[Path, str]:
     """
     Orchestrate resume download. Checks local folder cache first.
-    Reuses existing downloaded files mapping to the URL hash.
+    Reuses existing downloaded files mapping to the URL hash if valid (>10B).
     
     Returns:
         Tuple[Path, str]: (absolute_file_path, filename)
     """
     url = url.strip()
-    # Calculate unique hash from the URL
     url_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()[:12]
     
-    # Check if a file matching this url_hash already exists in the downloads directory
     DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
     for item in DOWNLOADS_DIR.iterdir():
         if item.is_file() and item.name.startswith(f"{url_hash}_"):
-            logger.info(f"Reused downloaded resume for {candidate_name} (found cached: {item.name})")
-            return item, item.name
+            if item.stat().st_size >= 10:
+                logger.info(f"Reused downloaded resume for {candidate_name} (found cached: {item.name})")
+                return item, item.name
+            else:
+                try:
+                    item.unlink()
+                except Exception:
+                    pass
             
-    # Check link type
     file_id, link_type = parse_google_drive_link(url)
     if not file_id:
-        # Fallback to direct URL download
         return download_direct_link(url, candidate_name, url_hash)
         
-    # Cache miss - download it with retry support
     return download_via_public_url(file_id, link_type, candidate_name, url_hash)

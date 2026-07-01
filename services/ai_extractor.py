@@ -173,9 +173,16 @@ def extract_resume_info(resume_text: str, api_key: str) -> Tuple[Dict, List[str]
     
     # 1. Check Cache
     cached_data = read_from_cache(hash_val)
-    if cached_data is not None:
+    if cached_data is not None and isinstance(cached_data, dict) and len(cached_data) > 0 and not cached_data.get("error"):
         warnings = validate_resume_json(cached_data)
         return cached_data, warnings
+    elif cached_data is not None:
+        cache_path = CACHE_DIR / f"{hash_val}.json"
+        try:
+            if cache_path.exists():
+                cache_path.unlink()
+        except Exception:
+            pass
         
     # 2. Cache Miss - Call OpenAI
     if not api_key:

@@ -228,8 +228,13 @@ def extract_text_from_file(file_path: Path) -> str:
     Uses magic bytes and multi-tier fallbacks to ensure successful text extraction.
     Caches parsed text locally using file content hash.
     """
-    if not file_path.exists():
-        raise FileNotFoundError(f"File not found: {file_path}")
+    if not file_path.exists() or file_path.stat().st_size < 10:
+        if file_path.exists():
+            try:
+                file_path.unlink()
+            except Exception:
+                pass
+        raise ValueError(f"File {file_path} is empty or corrupted.")
         
     # Calculate file content hash
     file_hash = get_file_hash(file_path)
@@ -237,11 +242,19 @@ def extract_text_from_file(file_path: Path) -> str:
     
     # 1. Check Cache
     if cache_file.exists():
-        logger.info(f"Reused parsed text for {file_path.name} (found cached parsed text)")
         try:
-            return cache_file.read_text(encoding="utf-8")
+            cached_text = cache_file.read_text(encoding="utf-8")
+            if cached_text and len(cached_text.strip()) >= 10:
+                logger.info(f"Reused parsed text for {file_path.name} (found cached parsed text)")
+                return cached_text
+            else:
+                cache_file.unlink()
         except Exception as e:
             logger.warning(f"Failed to read cached text file {cache_file.name}: {str(e)}")
+            try:
+                cache_file.unlink()
+            except Exception:
+                pass
             
     # 2. Inspect Magic Bytes
     try:
